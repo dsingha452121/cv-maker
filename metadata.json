@@ -1,0 +1,6 @@
+{
+  "name": "CV MAKER (SS TELECOM)",
+  "description": "Professional Bio-Data and CV Maker by SS TELECOM with professional description templates, AI review, custom color customization, 6 layout formats, section reordering, and A4 print/PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
