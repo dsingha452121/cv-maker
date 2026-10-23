@@ -65,9 +65,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
                 CV MAKER
               </h1>
-              <span className="text-[10px] sm:text-xs font-extrabold uppercase px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <a
+                href="https://ss-telecom.netlify.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-0.5 text-xs font-bold rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition print:hidden"
+              >
                 SS TELECOM
-              </span>
+              </a>
             </div>
             <p className="text-[11px] text-slate-500 hidden sm:block">
               Formal Indian standard job application & CV generation suite

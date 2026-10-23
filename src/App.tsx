@@ -566,6 +566,24 @@ export default function App() {
         </div>
       </div>
 
+      {/* SS TELECOM Banner */}
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-3 no-print">
+        <a
+          href="https://ss-telecom.netlify.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="print:hidden flex items-center justify-between gap-3 p-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-500 text-white shadow hover:shadow-lg transition cursor-pointer"
+        >
+          <div>
+            <p className="font-bold text-sm">📱 SS TELECOM, Paikpara</p>
+            <p className="text-xs opacity-90">Mobile Repairing • Accessories • Online Services</p>
+          </div>
+          <span className="text-xs font-semibold bg-white text-indigo-700 px-3 py-1.5 rounded-lg whitespace-nowrap shadow-2xs hover:bg-indigo-50">
+            Visit Website →
+          </span>
+        </a>
+      </div>
+
       {/* Main Workspace Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
