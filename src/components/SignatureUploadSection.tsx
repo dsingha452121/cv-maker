@@ -1,10 +1,16 @@
-import React, { useRef, useState, useEffect } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useRef, useState } from 'react';
 import {
   SignatureInfo,
   SignatureInkColor,
   SignatureSettings,
 } from '../types/biodata';
 import { processSignatureImage } from '../utils/signatureProcessor';
+import { ImageCropperModal, CropAspectRatio } from './ImageCropperModal';
 import {
   PenTool,
   Upload,
@@ -16,11 +22,16 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Crop,
+  Camera,
+  Check,
 } from 'lucide-react';
 
 interface SignatureUploadSectionProps {
   signature?: SignatureInfo;
   onChange: (updated: SignatureInfo) => void;
+  photoUrl?: string | null;
+  onPhotoChange?: (updatedPhotoUrl: string | null) => void;
 }
 
 const DEFAULT_SETTINGS: SignatureSettings = {
@@ -33,11 +44,29 @@ const DEFAULT_SETTINGS: SignatureSettings = {
 export const SignatureUploadSection: React.FC<SignatureUploadSectionProps> = ({
   signature,
   onChange,
+  photoUrl,
+  onPhotoChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewTab, setPreviewTab] = useState<'processed' | 'original'>('processed');
   const [showAdjustments, setShowAdjustments] = useState(false);
+
+  // Cropping Modal State
+  const [cropModal, setCropModal] = useState<{
+    isOpen: boolean;
+    imageSrc: string;
+    target: 'signature' | 'portrait';
+    title: string;
+    aspectRatio: CropAspectRatio;
+  }>({
+    isOpen: false,
+    imageSrc: '',
+    target: 'portrait',
+    title: 'Crop & Adjust Portrait Photo',
+    aspectRatio: '3:4',
+  });
 
   const currentSignature: SignatureInfo = signature || {
     rawImageUrl: null,
@@ -150,332 +179,525 @@ export const SignatureUploadSection: React.FC<SignatureUploadSectionProps> = ({
     }
   };
 
+  // Portrait Photo Handler
+  const handlePortraitPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+      alert('Please upload a valid image file (JPG, JPEG, PNG, or WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      // Immediately open cropper so user can adjust portrait framing before applying
+      setCropModal({
+        isOpen: true,
+        imageSrc: src,
+        target: 'portrait',
+        title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
+        aspectRatio: '3:4',
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyCroppedImage = (croppedDataUrl: string) => {
+    if (cropModal.target === 'portrait') {
+      onPhotoChange?.(croppedDataUrl);
+    } else if (cropModal.target === 'signature') {
+      // Re-run background removal on the cropped signature
+      applyProcessing(croppedDataUrl, settings);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-5 border-b border-slate-100 gap-3">
-        <div className="flex items-center gap-2">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6 space-y-6">
+      {/* 1. Portrait Photo Cropping & Adjustment Interface */}
+      <div>
+        <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
           <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
-            <PenTool className="w-5 h-5" />
+            <Camera className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-800">
-                6. Digital Signature Upload
+                Photo & Portrait Cropper
               </h2>
-              <span className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
-                Optional
+              <span className="text-[11px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-bold">
+                A4 CV Ready
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Upload a photo of your signature. Paper background is automatically removed to make it clean & transparent.
+              Crop and adjust your passport photograph to standard 3:4 portrait proportions with pan, zoom, and rotation
             </p>
           </div>
         </div>
 
-        {/* Global Signature Toggle */}
-        {processedImageUrl && (
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition">
-            <input
-              type="checkbox"
-              checked={isEnabled}
-              onChange={(e) => toggleEnabled(e.target.checked)}
-              className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-            />
-            <span>Include Signature on CV</span>
-          </label>
+        <input
+          ref={photoFileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/jpg,image/webp"
+          className="hidden"
+          onChange={handlePortraitPhotoUpload}
+        />
+
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-center gap-4">
+          {/* Portrait Photo Preview (3:4 Aspect Ratio) */}
+          <div
+            className="w-24 h-32 bg-white border border-slate-300 rounded-md overflow-hidden flex items-center justify-center shadow-inner flex-shrink-0 relative group"
+            style={{ aspectRatio: '3 / 4' }}
+          >
+            {photoUrl ? (
+              <>
+                <img
+                  src={photoUrl}
+                  alt="Portrait Preview"
+                  className="w-full h-full object-cover object-top"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCropModal({
+                      isOpen: true,
+                      imageSrc: photoUrl,
+                      target: 'portrait',
+                      title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
+                      aspectRatio: '3:4',
+                    })
+                  }
+                  title="Adjust & Crop Photo"
+                  className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer text-[10px] font-bold"
+                >
+                  <Crop className="w-4 h-4 mb-0.5" />
+                  <span>Adjust</span>
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-2 text-center text-slate-400">
+                <Camera className="w-6 h-6 mb-1 text-slate-300" />
+                <span className="text-[10px] uppercase font-bold text-slate-400">
+                  Passport 3:4
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 text-center sm:text-left space-y-2">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {photoUrl
+                ? 'Portrait Photo Configured'
+                : 'Upload or Crop Passport Photo'}
+            </h4>
+            <p className="text-xs text-slate-500 leading-relaxed max-w-lg">
+              {photoUrl
+                ? 'Your photo is active in the top-right corner of the CV. Click "Crop / Adjust" to re-center, zoom, or rotate.'
+                : 'Select an image from your device to open the interactive cropper with 3:4 passport framing.'}
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => photoFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer"
+              >
+                {photoUrl ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" /> Replace Photo
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" /> Upload Photo to Crop
+                  </>
+                )}
+              </button>
+
+              {photoUrl && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCropModal({
+                        isOpen: true,
+                        imageSrc: photoUrl,
+                        target: 'portrait',
+                        title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
+                        aspectRatio: '3:4',
+                      })
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
+                  >
+                    <Crop className="w-3.5 h-3.5 text-indigo-600" /> Crop / Adjust
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onPhotoChange?.(null)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Digital Signature Upload & Processing Section */}
+      <div className="pt-2 border-t border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+              <PenTool className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-slate-800">
+                  Digital Signature Upload & Cropping
+                </h2>
+                <span className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">
+                  Optional
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Upload a photo of your signature. Paper background is automatically removed to make it clean & transparent.
+              </p>
+            </div>
+          </div>
+
+          {/* Global Signature Toggle */}
+          {processedImageUrl && (
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition">
+              <input
+                type="checkbox"
+                checked={isEnabled}
+                onChange={(e) => toggleEnabled(e.target.checked)}
+                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+              />
+              <span>Include Signature on CV</span>
+            </label>
+          )}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/jpg,image/webp"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
+
+        {!rawImageUrl ? (
+          /* Empty Upload Dropzone */
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50/70 hover:bg-indigo-50/20 rounded-xl p-6 text-center transition group"
+          >
+            <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition">
+              <Upload className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">
+              Click to Upload Handwritten Signature
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mb-3">
+              Sign with a black or blue pen on white paper, snap a photo with your phone or scan it, and upload here (PNG, JPG, WebP).
+            </p>
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 group-hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition">
+              <Upload className="w-3.5 h-3.5" /> Select Signature Image
+            </span>
+          </div>
+        ) : (
+          /* Uploaded & Processed View */
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-5 items-start">
+              {/* Signature Preview Canvas Box */}
+              <div className="w-full md:w-64 flex-shrink-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    Preview
+                  </span>
+
+                  {/* Before / After toggle */}
+                  <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200 text-[10px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab('processed')}
+                      className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                        previewTab === 'processed'
+                          ? 'bg-white text-indigo-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Transparent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab('original')}
+                      className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                        previewTab === 'original'
+                          ? 'bg-white text-indigo-700 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Original
+                    </button>
+                  </div>
+                </div>
+
+                {/* Checkerboard container for transparent PNG */}
+                <div
+                  className="w-full h-32 rounded-xl border border-slate-300 flex items-center justify-center p-3 relative overflow-hidden shadow-inner"
+                  style={{
+                    backgroundImage:
+                      previewTab === 'processed'
+                        ? 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)'
+                        : 'none',
+                    backgroundSize: '16px 16px',
+                    backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                    backgroundColor: previewTab === 'processed' ? '#ffffff' : '#ffffff',
+                  }}
+                >
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center gap-1.5 text-xs text-indigo-600 font-medium">
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Removing paper background...</span>
+                    </div>
+                  ) : previewTab === 'processed' ? (
+                    processedImageUrl ? (
+                      <img
+                        src={processedImageUrl}
+                        alt="Transparent Signature"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">Processing...</span>
+                    )
+                  ) : (
+                    <img
+                      src={rawImageUrl}
+                      alt="Original Signature"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-1.5 text-center truncate">
+                  {fileName || 'Signature'}
+                </p>
+              </div>
+
+              {/* Quick Actions & Ink Selection */}
+              <div className="flex-1 space-y-4">
+                {/* Ink Color Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Signature Ink Color
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'black', label: 'Black Ink', color: '#0a0a0f' },
+                      { id: 'blue', label: 'Blue Ink', color: '#153c8a' },
+                      { id: 'original', label: 'Original Ink', color: '#475569' },
+                    ].map((ink) => {
+                      const isSelected = settings.inkColor === ink.id;
+                      return (
+                        <button
+                          key={ink.id}
+                          type="button"
+                          onClick={() =>
+                            updateSetting('inkColor', ink.id as SignatureInkColor)
+                          }
+                          className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                            isSelected
+                              ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20 shadow-xs'
+                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-full border border-black/20"
+                            style={{ backgroundColor: ink.color }}
+                          />
+                          <span>{ink.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Status Note */}
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-800">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>
+                      {isEnabled
+                        ? 'Transparent signature active on CV.'
+                        : 'Signature is currently disabled on CV.'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjustments(!showAdjustments)}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 underline underline-offset-2 cursor-pointer"
+                  >
+                    <Sliders className="w-3 h-3" />
+                    {showAdjustments ? 'Hide Sliders' : 'Fine-Tune Sliders'}
+                  </button>
+                </div>
+
+                {/* Buttons Row with Crop Signature */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCropModal({
+                        isOpen: true,
+                        imageSrc: rawImageUrl,
+                        target: 'signature',
+                        title: 'Crop Signature Image',
+                        aspectRatio: '3:1',
+                      })
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  >
+                    <Crop className="w-3.5 h-3.5 text-indigo-600" /> Crop Signature
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Replace Signature
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRemove}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Fine Tuning Controls (Collapsible or Shown) */}
+            {showAdjustments && (
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                    Fine-Tune Background Removal & Darkness
+                  </span>
+                  <button
+                    type="button"
+                    onClick={resetSettings}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Reset Sliders
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Background Removal Threshold */}
+                  <div>
+                    <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                      <span>Removal Strength</span>
+                      <span className="font-bold text-indigo-600">
+                        {settings.threshold}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="15"
+                      max="85"
+                      step="1"
+                      value={settings.threshold}
+                      onChange={(e) =>
+                        updateSetting('threshold', parseInt(e.target.value, 10))
+                      }
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Increase if paper background is grey or shadowed
+                    </p>
+                  </div>
+
+                  {/* Signature Darkness / Contrast */}
+                  <div>
+                    <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                      <span>Signature Darkness</span>
+                      <span className="font-bold text-indigo-600">
+                        {settings.darkness}x
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="2.5"
+                      step="0.1"
+                      value={settings.darkness}
+                      onChange={(e) =>
+                        updateSetting('darkness', parseFloat(e.target.value))
+                      }
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Makes thin ink strokes darker & bolder
+                    </p>
+                  </div>
+
+                  {/* Smooth Edges */}
+                  <div>
+                    <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                      <span>Smooth Edges</span>
+                      <span className="font-bold text-indigo-600">
+                        Level {settings.smoothness}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="3"
+                      step="1"
+                      value={settings.smoothness}
+                      onChange={(e) =>
+                        updateSetting('smoothness', parseInt(e.target.value, 10))
+                      }
+                      className="w-full accent-indigo-600 cursor-pointer"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Softens jagged edges on handwriting lines
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Privacy & Advice Tip */}
+            <div className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg text-[11px] text-slate-500 border border-slate-200">
+              <Info className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Private & Secure:</strong> All image cropping, adjustments, and background removal are performed 100% locally in your browser canvas. No images are sent to external servers.
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp"
-        className="hidden"
-        onChange={handleFileUpload}
+      {/* Image Cropper Modal */}
+      <ImageCropperModal
+        isOpen={cropModal.isOpen}
+        imageSrc={cropModal.imageSrc}
+        onClose={() => setCropModal((prev) => ({ ...prev, isOpen: false }))}
+        onApplyCrop={handleApplyCroppedImage}
+        initialAspectRatio={cropModal.aspectRatio}
+        title={cropModal.title}
       />
-
-      {!rawImageUrl ? (
-        /* Empty Upload Dropzone */
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50/70 hover:bg-indigo-50/20 rounded-xl p-6 text-center transition group"
-        >
-          <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition">
-            <Upload className="w-6 h-6" />
-          </div>
-          <h3 className="text-sm font-semibold text-slate-800 mb-1">
-            Click to Upload Handwritten Signature
-          </h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mb-3">
-            Sign with a black or blue pen on white paper, snap a photo with your phone or scan it, and upload here (PNG, JPG, WebP).
-          </p>
-          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 group-hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition">
-            <Upload className="w-3.5 h-3.5" /> Select Signature Image
-          </span>
-        </div>
-      ) : (
-        /* Uploaded & Processed View */
-        <div className="space-y-4">
-          <div className="flex flex-col md:flex-row gap-5 items-start">
-            {/* Signature Preview Canvas Box */}
-            <div className="w-full md:w-64 flex-shrink-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5 text-slate-500" />
-                  Preview
-                </span>
-
-                {/* Before / After toggle */}
-                <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200 text-[10px] font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTab('processed')}
-                    className={`px-2 py-0.5 rounded transition ${
-                      previewTab === 'processed'
-                        ? 'bg-white text-indigo-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Transparent
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTab('original')}
-                    className={`px-2 py-0.5 rounded transition ${
-                      previewTab === 'original'
-                        ? 'bg-white text-indigo-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Original
-                  </button>
-                </div>
-              </div>
-
-              {/* Checkerboard container for transparent PNG */}
-              <div
-                className="w-full h-32 rounded-xl border border-slate-300 flex items-center justify-center p-3 relative overflow-hidden shadow-inner"
-                style={{
-                  backgroundImage:
-                    previewTab === 'processed'
-                      ? 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)'
-                      : 'none',
-                  backgroundSize: '16px 16px',
-                  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-                  backgroundColor: previewTab === 'processed' ? '#ffffff' : '#ffffff',
-                }}
-              >
-                {isProcessing ? (
-                  <div className="flex flex-col items-center gap-1.5 text-xs text-indigo-600 font-medium">
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Removing paper background...</span>
-                  </div>
-                ) : previewTab === 'processed' ? (
-                  processedImageUrl ? (
-                    <img
-                      src={processedImageUrl}
-                      alt="Transparent Signature"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-slate-400">Processing...</span>
-                  )
-                ) : (
-                  <img
-                    src={rawImageUrl}
-                    alt="Original Signature"
-                    className="max-h-full max-w-full object-contain"
-                  />
-                )}
-              </div>
-
-              <p className="text-[11px] text-slate-500 mt-1.5 text-center truncate">
-                {fileName || 'Signature'}
-              </p>
-            </div>
-
-            {/* Quick Actions & Ink Selection */}
-            <div className="flex-1 space-y-4">
-              {/* Ink Color Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Signature Ink Color
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'black', label: 'Black Ink', color: '#0a0a0f' },
-                    { id: 'blue', label: 'Blue Ink', color: '#153c8a' },
-                    { id: 'original', label: 'Original Ink', color: '#475569' },
-                  ].map((ink) => {
-                    const isSelected = settings.inkColor === ink.id;
-                    return (
-                      <button
-                        key={ink.id}
-                        type="button"
-                        onClick={() =>
-                          updateSetting('inkColor', ink.id as SignatureInkColor)
-                        }
-                        className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold transition ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20 shadow-xs'
-                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <span
-                          className="w-3 h-3 rounded-full border border-black/20"
-                          style={{ backgroundColor: ink.color }}
-                        />
-                        <span>{ink.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Status Note */}
-              <div className="flex items-center justify-between p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-800">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>
-                    {isEnabled
-                      ? 'Transparent signature active on CV.'
-                      : 'Signature is currently disabled on CV.'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAdjustments(!showAdjustments)}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 underline underline-offset-2"
-                >
-                  <Sliders className="w-3 h-3" />
-                  {showAdjustments ? 'Hide Sliders' : 'Fine-Tune Sliders'}
-                </button>
-              </div>
-
-              {/* Buttons Row */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition"
-                >
-                  <RefreshCw className="w-3 h-3" /> Replace Signature
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRemove}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold rounded-lg transition"
-                >
-                  <Trash2 className="w-3 h-3" /> Remove
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Fine Tuning Controls (Collapsible or Shown) */}
-          {showAdjustments && (
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-indigo-600" />
-                  Fine-Tune Background Removal & Darkness
-                </span>
-                <button
-                  type="button"
-                  onClick={resetSettings}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
-                >
-                  <RotateCcw className="w-3 h-3" /> Reset Sliders
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Background Removal Threshold */}
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                    <span>Removal Strength</span>
-                    <span className="font-bold text-indigo-600">
-                      {settings.threshold}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="15"
-                    max="85"
-                    step="1"
-                    value={settings.threshold}
-                    onChange={(e) =>
-                      updateSetting('threshold', parseInt(e.target.value, 10))
-                    }
-                    className="w-full accent-indigo-600 cursor-pointer"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Increase if paper background is grey or shadowed
-                  </p>
-                </div>
-
-                {/* Signature Darkness / Contrast */}
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                    <span>Signature Darkness</span>
-                    <span className="font-bold text-indigo-600">
-                      {settings.darkness}x
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1.0"
-                    max="2.5"
-                    step="0.1"
-                    value={settings.darkness}
-                    onChange={(e) =>
-                      updateSetting('darkness', parseFloat(e.target.value))
-                    }
-                    className="w-full accent-indigo-600 cursor-pointer"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Makes thin ink strokes darker & bolder
-                  </p>
-                </div>
-
-                {/* Smooth Edges */}
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                    <span>Smooth Edges</span>
-                    <span className="font-bold text-indigo-600">
-                      Level {settings.smoothness}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3"
-                    step="1"
-                    value={settings.smoothness}
-                    onChange={(e) =>
-                      updateSetting('smoothness', parseInt(e.target.value, 10))
-                    }
-                    className="w-full accent-indigo-600 cursor-pointer"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Softens jagged edges on handwriting lines
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Privacy & Advice Tip */}
-          <div className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg text-[11px] text-slate-500 border border-slate-200">
-            <Info className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" />
-            <span>
-              <strong>Private & Secure:</strong> All image processing and background removal is performed 100% locally in your browser canvas. No signature images are ever sent to external servers.
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

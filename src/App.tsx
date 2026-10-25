@@ -33,6 +33,7 @@ import { ColorCustomizer } from './components/ColorCustomizer';
 import { AIReviewModal } from './components/AIReviewModal';
 import { PreviewWrapper } from './components/PreviewWrapper';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
+import { ShareQRCodeModal } from './components/ShareQRCodeModal';
 import {
   downloadCvPdf,
   printCvDocument,
@@ -51,6 +52,7 @@ import {
   LayoutTemplate,
   Palette,
   ArrowRight,
+  QrCode,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'ss_telecom_cv_maker_data_v3';
@@ -156,6 +158,12 @@ export default function App() {
   // Modals & transient states
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState(false);
+  const [isShareQrOpen, setIsShareQrOpen] = useState(false);
+  const [isViewingSharedCv, setIsViewingSharedCv] = useState(false);
+  const [sharedBannerInfo, setSharedBannerInfo] = useState<{
+    candidateName: string;
+    createdAt?: string;
+  } | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [toastMessage, setToastMessage] = useState<{
@@ -163,6 +171,43 @@ export default function App() {
     type: 'success' | 'warning' | 'error';
   } | null>(null);
   const [isValidated, setIsValidated] = useState(false);
+
+  // Check for shared CV in URL query params on initial load (?cv=... or ?preview=...)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const shareId = params.get('cv');
+      if (shareId) {
+        fetch(`/api/share-cv/${shareId}`)
+          .then((res) => res.json())
+          .then((res) => {
+            if (res.success && res.data) {
+              const shared = res.data;
+              if (shared.cvData) setData(shared.cvData);
+              if (shared.colors) setColors(shared.colors);
+              if (shared.themeId) setSelectedTheme(shared.themeId);
+              if (shared.formatId) setSelectedFormat(shared.formatId);
+              if (shared.typography) setTypography(shared.typography);
+              setIsViewingSharedCv(true);
+              setSharedBannerInfo({
+                candidateName: shared.cvData?.personal?.fullName || 'Candidate',
+                createdAt: shared.createdAt,
+              });
+              setActiveTabMobile('preview');
+              setToastMessage({
+                text: 'Loaded shared CV from QR code!',
+                type: 'success',
+              });
+            }
+          })
+          .catch((err) => {
+            console.warn('Could not retrieve shared CV:', err);
+          });
+      }
+    } catch (e) {
+      console.warn('Error reading share URL param:', e);
+    }
+  }, []);
 
   // Save data to localStorage on changes
   useEffect(() => {
@@ -507,12 +552,61 @@ export default function App() {
         onResetClick={() => setIsResetModalOpen(true)}
         onLoadSample={handleLoadSample}
         onOpenAiReview={() => setIsAiReviewOpen(true)}
+        onOpenShareQr={() => setIsShareQrOpen(true)}
         isGeneratingPdf={isGeneratingPdf}
         isValidated={isValidated}
         onDownloadImage={handleDownloadImage}
         onDownloadZip={handleDownloadZip}
         isExportingImage={isExportingImage}
       />
+
+      {/* Shared CV Online Viewer Banner */}
+      {isViewingSharedCv && (
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-md no-print border-b border-indigo-500/30">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-lg border border-indigo-400/30">
+              <QrCode className="w-4 h-4 text-indigo-300" />
+            </div>
+            <div>
+              <span className="text-xs font-bold block text-white">
+                Viewing {sharedBannerInfo?.candidateName}'s CV (Shared via QR Code)
+              </span>
+              <span className="text-[11px] text-slate-300 block">
+                Verified digital Bio-Data • Ready for online review, PDF export, or printing
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-white/20"
+            >
+              <Printer className="w-3.5 h-3.5" /> Print
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5" /> Download PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', window.location.pathname);
+                setIsViewingSharedCv(false);
+                setSharedBannerInfo(null);
+                showToast('Switched to CV editor mode', 'info' as any);
+              }}
+              className="px-2.5 py-1.5 text-indigo-300 hover:text-white text-xs font-semibold cursor-pointer underline underline-offset-2"
+            >
+              Edit / Create New CV
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast Alert */}
       {toastMessage && (
@@ -702,6 +796,14 @@ export default function App() {
                 <SignatureUploadSection
                   signature={data.signature}
                   onChange={handleSignatureChange}
+                  photoUrl={data.personal.photoUrl}
+                  onPhotoChange={(newPhotoUrl) =>
+                    handlePersonalChange({
+                      ...data.personal,
+                      photoUrl: newPhotoUrl,
+                      photoFileName: newPhotoUrl ? 'portrait_photo.jpg' : '',
+                    })
+                  }
                 />
               </div>
             )}
@@ -790,6 +892,7 @@ export default function App() {
               }}
               onPrint={handlePrint}
               onDownloadPdf={handleDownloadPdf}
+              onOpenShareQr={() => setIsShareQrOpen(true)}
               isGeneratingPdf={isGeneratingPdf}
               onDownloadImage={handleDownloadImage}
               onDownloadZip={handleDownloadZip}
@@ -852,6 +955,17 @@ export default function App() {
         isOpen={isResetModalOpen}
         onClose={() => setIsResetModalOpen(false)}
         onConfirm={handleConfirmReset}
+      />
+
+      {/* Share via QR Code Modal */}
+      <ShareQRCodeModal
+        isOpen={isShareQrOpen}
+        onClose={() => setIsShareQrOpen(false)}
+        data={data}
+        colors={colors}
+        themeId={selectedTheme}
+        formatId={selectedFormat}
+        typography={typography}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -508,6 +510,90 @@ Return a JSON object with:
 
 app.post('/api/generate-description', handleGenerateDescriptionRequest);
 app.post('/api/ai/generate-summary', handleGenerateDescriptionRequest);
+
+// Shared CV Storage
+const SHARED_CVS_DIR = path.resolve(__dirname, '.shared_cvs');
+if (!fs.existsSync(SHARED_CVS_DIR)) {
+  try {
+    fs.mkdirSync(SHARED_CVS_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('Could not create .shared_cvs dir:', err);
+  }
+}
+
+const sharedCvsMemoryMap = new Map<string, any>();
+
+// POST /api/share-cv: Generates unique shareable ID and saves CV payload
+app.post('/api/share-cv', (req, res) => {
+  try {
+    const { cvData, colors, themeId, formatId, typography } = req.body;
+    if (!cvData) {
+      return res.status(400).json({ error: 'Missing cvData' });
+    }
+
+    const shareId = 'cv_' + crypto.randomBytes(5).toString('hex');
+    const payload = {
+      id: shareId,
+      cvData,
+      colors: colors || null,
+      themeId: themeId || 'classic-black',
+      formatId: formatId || 'classic',
+      typography: typography || null,
+      createdAt: new Date().toISOString(),
+    };
+
+    sharedCvsMemoryMap.set(shareId, payload);
+
+    try {
+      const filePath = path.join(SHARED_CVS_DIR, `${shareId}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+    } catch (fsErr) {
+      console.warn('Could not write shared CV to disk:', fsErr);
+    }
+
+    return res.json({
+      success: true,
+      shareId,
+    });
+  } catch (err: any) {
+    console.error('Error creating shared CV:', err);
+    return res.status(500).json({ error: 'Failed to create share link' });
+  }
+});
+
+// GET /api/share-cv/:id: Retrieves the saved CV payload
+app.get('/api/share-cv/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Invalid ID' });
+    }
+
+    let payload = sharedCvsMemoryMap.get(id);
+    if (!payload) {
+      const filePath = path.join(SHARED_CVS_DIR, `${id}.json`);
+      if (fs.existsSync(filePath)) {
+        try {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          payload = JSON.parse(raw);
+          sharedCvsMemoryMap.set(id, payload);
+        } catch {}
+      }
+    }
+
+    if (!payload) {
+      return res.status(404).json({ error: 'Shared CV not found or link has expired.' });
+    }
+
+    return res.json({
+      success: true,
+      data: payload,
+    });
+  } catch (err: any) {
+    console.error('Error retrieving shared CV:', err);
+    return res.status(500).json({ error: 'Failed to retrieve CV' });
+  }
+});
 
 // Mount Vite or serve static files
 async function startServer() {

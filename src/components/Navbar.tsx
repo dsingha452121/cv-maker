@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Archive,
   FileImage,
+  QrCode,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -19,6 +20,7 @@ interface NavbarProps {
   onResetClick: () => void;
   onLoadSample: () => void;
   onOpenAiReview: () => void;
+  onOpenShareQr?: () => void;
   isGeneratingPdf: boolean;
   isValidated: boolean;
   onDownloadImage?: (format: 'png' | 'jpeg') => void;
@@ -33,6 +35,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onResetClick,
   onLoadSample,
   onOpenAiReview,
+  onOpenShareQr,
   isGeneratingPdf,
   isValidated,
   onDownloadImage,
@@ -149,6 +152,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </button>
+
+          {/* Share via QR Code Button */}
+          {onOpenShareQr && (
+            <button
+              type="button"
+              onClick={onOpenShareQr}
+              title="Share CV via unique QR Code"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 rounded-lg transition active:scale-95 cursor-pointer select-none"
+            >
+              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Share QR</span>
+            </button>
+          )}
 
           {/* PRIORITY 4: Download Image Dropdown Button */}
           <div className="relative" ref={menuRef}>

@@ -15,7 +15,9 @@ import {
   ShieldCheck,
   Shield,
   Check,
+  Crop,
 } from 'lucide-react';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface PersonalInformationFormProps {
   data: PersonalInfo;
@@ -64,6 +66,7 @@ export const PersonalInformationForm: React.FC<PersonalInformationFormProps> = (
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAadhaarValue, setShowAadhaarValue] = useState(false);
+  const [isCropOpen, setIsCropOpen] = useState(false);
 
   const handleAadhaarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 12);
@@ -182,13 +185,23 @@ export const PersonalInformationForm: React.FC<PersonalInformationFormProps> = (
               </button>
 
               {data.photoUrl && (
-                <button
-                  type="button"
-                  onClick={removePhoto}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-medium rounded-lg transition"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Remove
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsCropOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 text-xs font-medium rounded-lg shadow-2xs transition"
+                  >
+                    <Crop className="w-3.5 h-3.5 text-indigo-600" /> Crop / Adjust
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={removePhoto}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-medium rounded-lg transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -576,6 +589,22 @@ export const PersonalInformationForm: React.FC<PersonalInformationFormProps> = (
           </div>
         )}
       </div>
+
+      {data.photoUrl && (
+        <ImageCropperModal
+          isOpen={isCropOpen}
+          imageSrc={data.photoUrl}
+          onClose={() => setIsCropOpen(false)}
+          onApplyCrop={(croppedUrl) => {
+            onChange({
+              ...data,
+              photoUrl: croppedUrl,
+            });
+          }}
+          initialAspectRatio="3:4"
+          title="Crop & Adjust Portrait Photo (3:4 Passport)"
+        />
+      )}
     </div>
   );
 };

@@ -28,6 +28,7 @@ import {
   Archive,
   FileImage,
   AlertTriangle,
+  QrCode,
 } from 'lucide-react';
 
 interface PreviewWrapperProps {
@@ -42,6 +43,7 @@ interface PreviewWrapperProps {
   onResetTypography: () => void;
   onPrint: () => void;
   onDownloadPdf: () => void;
+  onOpenShareQr?: () => void;
   isGeneratingPdf: boolean;
   onOpenColorCustomizer?: () => void;
   onDownloadImage?: (format: 'png' | 'jpeg') => void;
@@ -61,6 +63,7 @@ export const PreviewWrapper: React.FC<PreviewWrapperProps> = ({
   onResetTypography,
   onPrint,
   onDownloadPdf,
+  onOpenShareQr,
   isGeneratingPdf,
   onOpenColorCustomizer,
   onDownloadImage,
@@ -202,6 +205,19 @@ export const PreviewWrapper: React.FC<PreviewWrapperProps> = ({
               </>
             )}
           </button>
+
+          {/* Share QR Code button */}
+          {onOpenShareQr && (
+            <button
+              type="button"
+              onClick={onOpenShareQr}
+              title="Share CV via QR Code"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg shadow-2xs transition active:scale-95 cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Share QR</span>
+            </button>
+          )}
 
           {/* Download Image dropdown */}
           <div className="relative" ref={previewImageMenuRef}>
