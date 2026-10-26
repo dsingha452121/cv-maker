@@ -59,7 +59,47 @@ export interface DeclarationInfo {
   text: string;
   date: string;
   place: string;
+  templateId?: string;
 }
+
+export interface DeclarationTemplate {
+  id: string;
+  name: string;
+  text: string;
+}
+
+export const DECLARATION_TEMPLATES: DeclarationTemplate[] = [
+  {
+    id: 'standard',
+    name: '1. Standard Formal Declaration',
+    text: 'I hereby declare that all the information provided above is true and correct to the best of my knowledge and belief.',
+  },
+  {
+    id: 'short',
+    name: '2. Short & Simple Declaration',
+    text: 'I declare that the information provided above is true and correct.',
+  },
+  {
+    id: 'professional',
+    name: '3. Professional Job Application',
+    text: 'I hereby declare that all the details mentioned above are accurate and complete to the best of my knowledge and belief.',
+  },
+  {
+    id: 'honest',
+    name: '4. Honest & Responsible Candidate',
+    text: 'I sincerely declare that the information furnished above is true and correct. I accept responsibility for the accuracy of the information provided.',
+  },
+  {
+    id: 'govt',
+    name: '5. Indian Government Job Application',
+    text: 'I hereby declare that all the particulars furnished above are true and correct to the best of my knowledge and belief. I understand that any false information may lead to rejection of my application.',
+  },
+  {
+    id: 'custom',
+    name: '6. Custom Declaration (Write Your Own)',
+    text: '',
+  },
+];
 
 export type SignatureInkColor = 'black' | 'blue' | 'original';
 
@@ -742,9 +782,10 @@ export const INITIAL_EMPTY_STATE: BioDataState = {
     },
   ],
   declaration: {
-    text: 'I hereby declare that all the statements made above are true and correct to the best of my knowledge and belief. I understand that any information found false or incorrect may affect my application.',
+    text: 'I hereby declare that all the information provided above is true and correct to the best of my knowledge and belief.',
     date: '',
     place: '',
+    templateId: 'standard',
   },
   signature: {
     rawImageUrl: null,
@@ -867,9 +908,10 @@ export const SAMPLE_STATE: BioDataState = {
     },
   ],
   declaration: {
-    text: 'I hereby declare that all the statements made above are true and correct to the best of my knowledge and belief. I understand that any information found false or incorrect may affect my application.',
+    text: 'I hereby declare that all the information provided above is true and correct to the best of my knowledge and belief.',
     date: new Date().toISOString().split('T')[0],
     place: 'Kolkata',
+    templateId: 'standard',
   },
   signature: {
     rawImageUrl: null,

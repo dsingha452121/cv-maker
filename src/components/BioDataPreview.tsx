@@ -812,6 +812,7 @@ export const BioDataPreview: React.FC<BioDataPreviewProps> = ({
       }
 
       case 'declaration':
+        if (!declaration.text?.trim()) return null;
         return (
           <div
             key="section-declaration"
