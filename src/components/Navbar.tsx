@@ -26,6 +26,8 @@ interface NavbarProps {
   onDownloadImage?: (format: 'png' | 'jpeg') => void;
   onDownloadZip?: () => void;
   isExportingImage?: boolean;
+  saveStatus?: 'saved' | 'saving';
+  lastSavedAt?: Date | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -41,9 +43,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onDownloadImage,
   onDownloadZip,
   isExportingImage,
+  saveStatus = 'saved',
+  lastSavedAt,
 }) => {
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const lastSavedFormatted = lastSavedAt
+    ? lastSavedAt.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : '';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -58,9 +70,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Brand */}
+        {/* Brand & Auto-save status */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-900 text-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-indigo-900 text-white flex items-center justify-center shadow-sm flex-shrink-0">
             <FileText className="w-5 h-5 text-indigo-300" />
           </div>
           <div>
@@ -81,10 +93,61 @@ export const Navbar: React.FC<NavbarProps> = ({
               Formal Indian standard job application & CV generation suite
             </p>
           </div>
+
+          {/* Visual Auto-Save Indicator (Desktop / Tablet) */}
+          <div
+            className={`hidden md:inline-flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-300 select-none ${
+              saveStatus === 'saving'
+                ? 'bg-amber-50 text-amber-800 border-amber-300/80 shadow-2xs'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-2xs'
+            }`}
+            title={
+              saveStatus === 'saving'
+                ? 'Saving changes to browser local storage...'
+                : `All changes automatically saved to local storage${
+                    lastSavedFormatted ? ` • Last saved at ${lastSavedFormatted}` : ''
+                  }`
+            }
+          >
+            <span className="relative flex h-2 w-2">
+              {saveStatus === 'saving' ? (
+                <span className="inline-flex rounded-full h-2 w-2 bg-amber-500 animate-ping" />
+              ) : (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 duration-1000" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </>
+              )}
+            </span>
+            <span className="text-[11px] font-semibold tracking-tight">
+              {saveStatus === 'saving' ? 'Auto-saving...' : 'Auto-saved'}
+            </span>
+          </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Mobile Auto-Save Indicator */}
+          <div
+            className={`md:hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all duration-300 select-none ${
+              saveStatus === 'saving'
+                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            }`}
+            title={saveStatus === 'saving' ? 'Saving...' : 'Auto-saved to device'}
+          >
+            <span className="relative flex h-1.5 w-1.5">
+              {saveStatus === 'saving' ? (
+                <span className="inline-flex rounded-full h-1.5 w-1.5 bg-amber-500 animate-ping" />
+              ) : (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 duration-1000" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                </>
+              )}
+            </span>
+            <span>{saveStatus === 'saving' ? 'Saving' : 'Saved'}</span>
+          </div>
           {/* AI Review CV Button (Button 1) */}
           <button
             type="button"

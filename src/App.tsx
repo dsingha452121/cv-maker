@@ -172,6 +172,11 @@ export default function App() {
   } | null>(null);
   const [isValidated, setIsValidated] = useState(false);
 
+  // Auto-save indicator tracking
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(new Date());
+  const isInitialSaveMount = React.useRef(false);
+
   // Check for shared CV in URL query params on initial load (?cv=... or ?preview=...)
   useEffect(() => {
     try {
@@ -211,17 +216,31 @@ export default function App() {
 
   // Save data to localStorage on changes
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.warn('Failed to save data to localStorage:', e);
+    if (!isInitialSaveMount.current) {
+      isInitialSaveMount.current = true;
+      return;
     }
+    setSaveStatus('saving');
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        setSaveStatus('saved');
+        setLastSavedAt(new Date());
+      } catch (e) {
+        console.warn('Failed to save data to localStorage:', e);
+        setSaveStatus('saved');
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
   }, [data]);
 
   // Save theme selection
   useEffect(() => {
     try {
       localStorage.setItem(THEME_KEY, selectedTheme);
+      setSaveStatus('saved');
+      setLastSavedAt(new Date());
     } catch (e) {
       // ignore
     }
@@ -231,6 +250,8 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
+      setSaveStatus('saved');
+      setLastSavedAt(new Date());
     } catch (e) {
       // ignore
     }
@@ -240,6 +261,8 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(FORMAT_KEY, selectedFormat);
+      setSaveStatus('saved');
+      setLastSavedAt(new Date());
     } catch (e) {
       // ignore
     }
@@ -249,6 +272,8 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(TYPOGRAPHY_KEY, JSON.stringify(typography));
+      setSaveStatus('saved');
+      setLastSavedAt(new Date());
     } catch (e) {
       // ignore
     }
@@ -558,6 +583,8 @@ export default function App() {
         onDownloadImage={handleDownloadImage}
         onDownloadZip={handleDownloadZip}
         isExportingImage={isExportingImage}
+        saveStatus={saveStatus}
+        lastSavedAt={lastSavedAt}
       />
 
       {/* Shared CV Online Viewer Banner */}
@@ -796,14 +823,6 @@ export default function App() {
                 <SignatureUploadSection
                   signature={data.signature}
                   onChange={handleSignatureChange}
-                  photoUrl={data.personal.photoUrl}
-                  onPhotoChange={(newPhotoUrl) =>
-                    handlePersonalChange({
-                      ...data.personal,
-                      photoUrl: newPhotoUrl,
-                      photoFileName: newPhotoUrl ? 'portrait_photo.jpg' : '',
-                    })
-                  }
                 />
               </div>
             )}

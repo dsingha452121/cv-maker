@@ -23,7 +23,6 @@ import {
   Sparkles,
   Info,
   Crop,
-  Camera,
   Check,
 } from 'lucide-react';
 
@@ -44,28 +43,25 @@ const DEFAULT_SETTINGS: SignatureSettings = {
 export const SignatureUploadSection: React.FC<SignatureUploadSectionProps> = ({
   signature,
   onChange,
-  photoUrl,
-  onPhotoChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewTab, setPreviewTab] = useState<'processed' | 'original'>('processed');
   const [showAdjustments, setShowAdjustments] = useState(false);
 
-  // Cropping Modal State
+  // Cropping Modal State for signature
   const [cropModal, setCropModal] = useState<{
     isOpen: boolean;
     imageSrc: string;
-    target: 'signature' | 'portrait';
+    target: 'signature';
     title: string;
     aspectRatio: CropAspectRatio;
   }>({
     isOpen: false,
     imageSrc: '',
-    target: 'portrait',
-    title: 'Crop & Adjust Portrait Photo',
-    aspectRatio: '3:4',
+    target: 'signature',
+    title: 'Crop & Adjust Signature Photo',
+    aspectRatio: 'free',
   });
 
   const currentSignature: SignatureInfo = signature || {
@@ -179,176 +175,13 @@ export const SignatureUploadSection: React.FC<SignatureUploadSectionProps> = ({
     }
   };
 
-  // Portrait Photo Handler
-  const handlePortraitPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
-      alert('Please upload a valid image file (JPG, JPEG, PNG, or WebP).');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = reader.result as string;
-      // Immediately open cropper so user can adjust portrait framing before applying
-      setCropModal({
-        isOpen: true,
-        imageSrc: src,
-        target: 'portrait',
-        title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
-        aspectRatio: '3:4',
-      });
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleApplyCroppedImage = (croppedDataUrl: string) => {
-    if (cropModal.target === 'portrait') {
-      onPhotoChange?.(croppedDataUrl);
-    } else if (cropModal.target === 'signature') {
-      // Re-run background removal on the cropped signature
-      applyProcessing(croppedDataUrl, settings);
-    }
+    applyProcessing(croppedDataUrl, settings);
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6 space-y-6">
-      {/* 1. Portrait Photo Cropping & Adjustment Interface */}
-      <div>
-        <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-          <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
-            <Camera className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-800">
-                Photo & Portrait Cropper
-              </h2>
-              <span className="text-[11px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-bold">
-                A4 CV Ready
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Crop and adjust your passport photograph to standard 3:4 portrait proportions with pan, zoom, and rotation
-            </p>
-          </div>
-        </div>
-
-        <input
-          ref={photoFileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/jpg,image/webp"
-          className="hidden"
-          onChange={handlePortraitPhotoUpload}
-        />
-
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-center gap-4">
-          {/* Portrait Photo Preview (3:4 Aspect Ratio) */}
-          <div
-            className="w-24 h-32 bg-white border border-slate-300 rounded-md overflow-hidden flex items-center justify-center shadow-inner flex-shrink-0 relative group"
-            style={{ aspectRatio: '3 / 4' }}
-          >
-            {photoUrl ? (
-              <>
-                <img
-                  src={photoUrl}
-                  alt="Portrait Preview"
-                  className="w-full h-full object-cover object-top"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCropModal({
-                      isOpen: true,
-                      imageSrc: photoUrl,
-                      target: 'portrait',
-                      title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
-                      aspectRatio: '3:4',
-                    })
-                  }
-                  title="Adjust & Crop Photo"
-                  className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer text-[10px] font-bold"
-                >
-                  <Crop className="w-4 h-4 mb-0.5" />
-                  <span>Adjust</span>
-                </button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-2 text-center text-slate-400">
-                <Camera className="w-6 h-6 mb-1 text-slate-300" />
-                <span className="text-[10px] uppercase font-bold text-slate-400">
-                  Passport 3:4
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 text-center sm:text-left space-y-2">
-            <h4 className="text-sm font-semibold text-slate-800">
-              {photoUrl
-                ? 'Portrait Photo Configured'
-                : 'Upload or Crop Passport Photo'}
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-lg">
-              {photoUrl
-                ? 'Your photo is active in the top-right corner of the CV. Click "Crop / Adjust" to re-center, zoom, or rotate.'
-                : 'Select an image from your device to open the interactive cropper with 3:4 passport framing.'}
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => photoFileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer"
-              >
-                {photoUrl ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5" /> Replace Photo
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-3.5 h-3.5" /> Upload Photo to Crop
-                  </>
-                )}
-              </button>
-
-              {photoUrl && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCropModal({
-                        isOpen: true,
-                        imageSrc: photoUrl,
-                        target: 'portrait',
-                        title: 'Crop & Adjust Portrait Photo (3:4 Passport)',
-                        aspectRatio: '3:4',
-                      })
-                    }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
-                  >
-                    <Crop className="w-3.5 h-3.5 text-indigo-600" /> Crop / Adjust
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onPhotoChange?.(null)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold rounded-lg transition cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Remove
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Digital Signature Upload & Processing Section */}
-      <div className="pt-2 border-t border-slate-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
               <PenTool className="w-5 h-5" />
@@ -687,7 +520,6 @@ export const SignatureUploadSection: React.FC<SignatureUploadSectionProps> = ({
             </div>
           </div>
         )}
-      </div>
 
       {/* Image Cropper Modal */}
       <ImageCropperModal
