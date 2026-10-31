@@ -11,6 +11,7 @@ import {
   Archive,
   FileImage,
   QrCode,
+  ScanLine,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -21,6 +22,7 @@ interface NavbarProps {
   onLoadSample: () => void;
   onOpenAiReview: () => void;
   onOpenShareQr?: () => void;
+  onOpenQrScanner?: () => void;
   isGeneratingPdf: boolean;
   isValidated: boolean;
   onDownloadImage?: (format: 'png' | 'jpeg') => void;
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLoadSample,
   onOpenAiReview,
   onOpenShareQr,
+  onOpenQrScanner,
   isGeneratingPdf,
   isValidated,
   onDownloadImage,
@@ -222,10 +225,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenShareQr}
               title="Share CV via unique QR Code"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 rounded-lg transition active:scale-95 cursor-pointer select-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 rounded-lg transition-all duration-150 hover:-translate-y-0.5 active:scale-95 cursor-pointer select-none shadow-2xs"
             >
               <QrCode className="w-3.5 h-3.5 text-indigo-600" />
               <span className="hidden sm:inline">Share QR</span>
+            </button>
+          )}
+
+          {/* Scan QR Code & Download PDF Button */}
+          {onOpenQrScanner && (
+            <button
+              type="button"
+              onClick={onOpenQrScanner}
+              title="Scan a CV QR code to preview and download PDF"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 active:bg-violet-200 border border-violet-200 rounded-lg transition-all duration-150 hover:-translate-y-0.5 active:scale-95 cursor-pointer select-none shadow-2xs"
+            >
+              <ScanLine className="w-3.5 h-3.5 text-violet-600" />
+              <span className="hidden sm:inline">Scan QR</span>
             </button>
           )}
 

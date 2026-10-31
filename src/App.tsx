@@ -34,6 +34,7 @@ import { AIReviewModal } from './components/AIReviewModal';
 import { PreviewWrapper } from './components/PreviewWrapper';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
 import { ShareQRCodeModal } from './components/ShareQRCodeModal';
+import { QRScannerModal } from './components/QRScannerModal';
 import {
   downloadCvPdf,
   printCvDocument,
@@ -53,6 +54,12 @@ import {
   Palette,
   ArrowRight,
   QrCode,
+  ScanLine,
+  Loader2,
+  Copy,
+  Check,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'ss_telecom_cv_maker_data_v3';
@@ -159,10 +166,13 @@ export default function App() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState(false);
   const [isShareQrOpen, setIsShareQrOpen] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isViewingSharedCv, setIsViewingSharedCv] = useState(false);
+  const [showDirectDownloadCard, setShowDirectDownloadCard] = useState(false);
   const [sharedBannerInfo, setSharedBannerInfo] = useState<{
     candidateName: string;
     createdAt?: string;
+    shareId?: string;
   } | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
@@ -177,47 +187,88 @@ export default function App() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(new Date());
   const isInitialSaveMount = React.useRef(false);
 
+  // Central loader for shared CV from either URL or QR Scanner
+  const loadSharedCv = async (shareId: string, autoDownload: boolean = false) => {
+    try {
+      showToast('Retrieving CV details from QR Code...', 'info' as any);
+      const res = await fetch(`/api/share-cv/${shareId}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const shared = json.data;
+        if (shared.cvData) setData(shared.cvData);
+        if (shared.colors) setColors(shared.colors);
+        if (shared.themeId) setSelectedTheme(shared.themeId);
+        if (shared.formatId) setSelectedFormat(shared.formatId);
+        if (shared.typography) setTypography(shared.typography);
+        setIsViewingSharedCv(true);
+        setSharedBannerInfo({
+          candidateName: shared.cvData?.personal?.fullName || 'Candidate',
+          createdAt: shared.createdAt,
+          shareId: shared.id || shareId,
+        });
+        setActiveTabMobile('preview');
+        showToast('Successfully loaded CV from QR scan!', 'success');
+
+        if (autoDownload) {
+          setShowDirectDownloadCard(true);
+          // Wait briefly for preview DOM nodes to render before triggering download
+          setTimeout(() => {
+            handleDownloadPdf();
+          }, 750);
+        }
+      } else {
+        showToast('Could not find shared CV. The link may have expired.', 'error');
+      }
+    } catch (err) {
+      console.warn('Error loading shared CV:', err);
+      showToast('Failed to load shared CV. Please check connection.', 'error');
+    }
+  };
+
   // Check for shared CV in URL query params on initial load (?cv=... or ?preview=...)
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const shareId = params.get('cv');
+      const action = params.get('action') || (params.get('download') ? 'download' : null);
+
+      if (action === 'download') {
+        setShowDirectDownloadCard(true);
+      }
+
       if (shareId) {
-        fetch(`/api/share-cv/${shareId}`)
-          .then((res) => res.json())
-          .then((res) => {
-            if (res.success && res.data) {
-              const shared = res.data;
-              if (shared.cvData) setData(shared.cvData);
-              if (shared.colors) setColors(shared.colors);
-              if (shared.themeId) setSelectedTheme(shared.themeId);
-              if (shared.formatId) setSelectedFormat(shared.formatId);
-              if (shared.typography) setTypography(shared.typography);
+        loadSharedCv(shareId, action === 'download');
+      } else {
+        const preview = params.get('preview');
+        if (preview) {
+          try {
+            const decoded = JSON.parse(decodeURIComponent(atob(preview)));
+            if (decoded) {
               setIsViewingSharedCv(true);
               setSharedBannerInfo({
-                candidateName: shared.cvData?.personal?.fullName || 'Candidate',
-                createdAt: shared.createdAt,
+                candidateName: decoded.n || 'Candidate',
               });
               setActiveTabMobile('preview');
-              setToastMessage({
-                text: 'Loaded shared CV from QR code!',
-                type: 'success',
-              });
+              if (action === 'download') {
+                setShowDirectDownloadCard(true);
+              }
             }
-          })
-          .catch((err) => {
-            console.warn('Could not retrieve shared CV:', err);
-          });
+          } catch {}
+        }
       }
     } catch (e) {
       console.warn('Error reading share URL param:', e);
     }
   }, []);
 
-  // Save data to localStorage on changes
+  // Save data to localStorage on changes (safeguard: do NOT overwrite draft if viewing shared CV)
   useEffect(() => {
     if (!isInitialSaveMount.current) {
       isInitialSaveMount.current = true;
+      return;
+    }
+    if (isViewingSharedCv) {
+      // Do not overwrite user's local working copy when viewing someone else's shared CV!
       return;
     }
     setSaveStatus('saving');
@@ -233,7 +284,7 @@ export default function App() {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [data]);
+  }, [data, isViewingSharedCv]);
 
   // Save theme selection
   useEffect(() => {
@@ -578,6 +629,7 @@ export default function App() {
         onLoadSample={handleLoadSample}
         onOpenAiReview={() => setIsAiReviewOpen(true)}
         onOpenShareQr={() => setIsShareQrOpen(true)}
+        onOpenQrScanner={() => setIsQrScannerOpen(true)}
         isGeneratingPdf={isGeneratingPdf}
         isValidated={isValidated}
         onDownloadImage={handleDownloadImage}
@@ -587,49 +639,96 @@ export default function App() {
         lastSavedAt={lastSavedAt}
       />
 
-      {/* Shared CV Online Viewer Banner */}
+      {/* Shared CV Online Viewer Banner & Quick Action Suite */}
       {isViewingSharedCv && (
-        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-md no-print border-b border-indigo-500/30">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-lg border border-indigo-400/30">
-              <QrCode className="w-4 h-4 text-indigo-300" />
+        <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg no-print border-b-2 border-indigo-500/40 animate-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-3">
+            <div className="relative p-2 bg-indigo-600/30 text-indigo-300 rounded-xl border border-indigo-400/40 flex items-center justify-center shrink-0">
+              <QrCode className="w-5 h-5 text-indigo-200" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full" />
             </div>
             <div>
-              <span className="text-xs font-bold block text-white">
-                Viewing {sharedBannerInfo?.candidateName}'s CV (Shared via QR Code)
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-extrabold text-white">
+                  Viewing {sharedBannerInfo?.candidateName}'s CV
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-300" />
+                  <span>Verified via QR Code</span>
+                </span>
+              </div>
               <span className="text-[11px] text-slate-300 block">
-                Verified digital Bio-Data • Ready for online review, PDF export, or printing
+                Official single-page Indian A4 Bio-Data ready for instant download or print
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-white/20"
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/20 active:scale-95 shadow-2xs"
             >
-              <Printer className="w-3.5 h-3.5" /> Print
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
             </button>
+
+            {/* High-Impact Instant PDF Download Button */}
             <button
               type="button"
               onClick={handleDownloadPdf}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
+              disabled={isGeneratingPdf}
+              className="px-4 py-1.5 bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-600 hover:to-violet-700 active:from-indigo-700 active:to-violet-800 text-white rounded-lg text-xs font-extrabold transition-all duration-150 flex items-center gap-1.5 cursor-pointer shadow-md hover:shadow-indigo-500/25 active:scale-95 ring-2 ring-indigo-400/30"
             >
-              <Download className="w-3.5 h-3.5" /> Download PDF
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-white animate-bounce" />
+                  <span>Download A4 PDF</span>
+                </>
+              )}
             </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(window.location.href);
+                  showToast('Copied CV share link to clipboard!', 'success');
+                } catch {
+                  showToast('Unable to copy link', 'warning');
+                }
+              }}
+              title="Copy share link"
+              className="p-1.5 bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white rounded-lg transition cursor-pointer border border-white/15"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 window.history.pushState({}, '', window.location.pathname);
                 setIsViewingSharedCv(false);
                 setSharedBannerInfo(null);
-                showToast('Switched to CV editor mode', 'info' as any);
+                setShowDirectDownloadCard(false);
+                // Reload local draft from storage
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                  try {
+                    setData(JSON.parse(saved));
+                  } catch {}
+                }
+                showToast('Returned to your personal CV draft', 'info' as any);
               }}
-              className="px-2.5 py-1.5 text-indigo-300 hover:text-white text-xs font-semibold cursor-pointer underline underline-offset-2"
+              className="px-2.5 py-1.5 text-indigo-300 hover:text-white text-xs font-semibold cursor-pointer underline underline-offset-2 transition"
             >
-              Edit / Create New CV
+              Exit Shared View
             </button>
           </div>
         </div>
@@ -929,20 +1028,32 @@ export default function App() {
 
       {/* Floating Action Switcher for Mobile when viewing Preview */}
       {activeTabMobile === 'preview' && (
-        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40 bg-slate-900 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between no-print border border-slate-700">
-          <button
-            type="button"
-            onClick={() => setActiveTabMobile('form')}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-indigo-400" /> Back to Edit
-          </button>
+        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between no-print border border-slate-700/80 animate-in slide-in-from-bottom duration-300">
+          {!isViewingSharedCv ? (
+            <button
+              type="button"
+              onClick={() => setActiveTabMobile('form')}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg transition"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Back to Edit</span>
+            </button>
+          ) : (
+            <div className="truncate mr-2">
+              <span className="text-[10px] uppercase font-bold text-indigo-300 block">
+                Scanned CV
+              </span>
+              <span className="text-xs font-bold text-white truncate block">
+                {sharedBannerInfo?.candidateName || 'Candidate'}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handlePrint}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-white"
+              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-white transition active:scale-95"
               title="Print"
             >
               <Printer className="w-4 h-4" />
@@ -951,9 +1062,14 @@ export default function App() {
               type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 active:scale-95 text-white text-xs font-extrabold rounded-lg shadow-md transition"
             >
-              <Download className="w-3.5 h-3.5" /> PDF
+              {isGeneratingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>Download PDF</span>
             </button>
           </div>
         </div>
@@ -985,7 +1101,69 @@ export default function App() {
         themeId={selectedTheme}
         formatId={selectedFormat}
         typography={typography}
+        onOpenScanner={() => setIsQrScannerOpen(true)}
       />
+
+      {/* QR Scanner Tool Modal */}
+      <QRScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onCvLoaded={(shareId, autoDownload) => {
+          loadSharedCv(shareId, autoDownload);
+        }}
+      />
+
+      {/* Direct Download Pop-up for QR Scans */}
+      {showDirectDownloadCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 no-print">
+          <div className="bg-white rounded-2xl shadow-2xl border border-indigo-200 max-w-sm w-full p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shadow-xs">
+              <Download className="w-8 h-8 text-indigo-600 animate-bounce" />
+            </div>
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                QR Scanner Detected
+              </span>
+              <h3 className="text-lg font-bold text-slate-900 mt-2">
+                {sharedBannerInfo?.candidateName || 'Candidate'}'s CV
+              </h3>
+              <p className="text-xs text-slate-600 mt-1">
+                Print-ready standard Indian A4 single page format. Ready for instant download.
+              </p>
+            </div>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleDownloadPdf();
+                  setShowDirectDownloadCard(false);
+                }}
+                disabled={isGeneratingPdf}
+                className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isGeneratingPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Rendering PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-white" />
+                    <span>Download A4 PDF Now</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDirectDownloadCard(false)}
+                className="w-full py-2 px-3 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Preview Document First
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

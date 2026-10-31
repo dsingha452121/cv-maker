@@ -13,7 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize GoogleGenAI SDK server-side
 const apiKey = process.env.GEMINI_API_KEY;
@@ -523,6 +524,28 @@ if (!fs.existsSync(SHARED_CVS_DIR)) {
 
 const sharedCvsMemoryMap = new Map<string, any>();
 
+// Preload any existing shared CVs from disk into memory
+try {
+  if (fs.existsSync(SHARED_CVS_DIR)) {
+    const files = fs.readdirSync(SHARED_CVS_DIR);
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const id = file.replace(/\.json$/, '');
+        try {
+          const raw = fs.readFileSync(path.join(SHARED_CVS_DIR, file), 'utf-8');
+          const data = JSON.parse(raw);
+          sharedCvsMemoryMap.set(id, data);
+        } catch {}
+      }
+    }
+    if (sharedCvsMemoryMap.size > 0) {
+      console.log(`Preloaded ${sharedCvsMemoryMap.size} shared CVs from storage.`);
+    }
+  }
+} catch (e) {
+  console.warn('Error reading shared CVs from disk:', e);
+}
+
 // POST /api/share-cv: Generates unique shareable ID and saves CV payload
 app.post('/api/share-cv', (req, res) => {
   try {
@@ -551,9 +574,25 @@ app.post('/api/share-cv', (req, res) => {
       console.warn('Could not write shared CV to disk:', fsErr);
     }
 
+    // Determine public baseUrl from reverse proxy headers if available
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const proto =
+      typeof forwardedProto === 'string'
+        ? forwardedProto.split(',')[0].trim()
+        : req.secure
+        ? 'https'
+        : 'http';
+    const forwardedHost = req.headers['x-forwarded-host'];
+    const host =
+      typeof forwardedHost === 'string'
+        ? forwardedHost.split(',')[0].trim()
+        : req.headers.host || 'localhost:3000';
+    const baseUrl = `${proto}://${host}`;
+
     return res.json({
       success: true,
       shareId,
+      baseUrl,
     });
   } catch (err: any) {
     console.error('Error creating shared CV:', err);
